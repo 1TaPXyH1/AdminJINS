@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import '../services/web_barcode_scanner.dart'
-    if (dart.library.html) '../services/web_barcode_scanner.dart'
+import '../services/web_barcode_scanner_v2.dart'
+    if (dart.library.html) '../services/web_barcode_scanner_v2.dart'
     if (dart.library.io) '../services/web_barcode_scanner_stub.dart';
 
 
@@ -110,9 +110,8 @@ class _PlatformBarcodeScannerState extends State<PlatformBarcodeScanner> {
   // Mobile scanner controller
   MobileScannerController? _mobileController;
   
-  // Web scanner
-  WebBarcodeScanner? _webScanner;
-  dynamic _videoElement;
+  // Web scanner stream
+  Stream<String>? _webScannerStream;
   
   bool _isInitialized = false;
   String? _lastScannedCode;
@@ -134,20 +133,21 @@ class _PlatformBarcodeScannerState extends State<PlatformBarcodeScanner> {
   
   Future<void> _initializeWebScanner() async {
     try {
-      _webScanner = WebBarcodeScanner();
-      final stream = await _webScanner!.startScanning();
+      await WebBarcodeScannerV2.initializeLibrary();
+      _webScannerStream = await WebBarcodeScannerV2.startScanning(
+        context: context,
+        preferBackCamera: true,
+      );
       
-      if (stream != null) {
-        _videoElement = _webScanner!.videoElement;
-        
-        stream.listen((barcode) {
-          _handleBarcodeDetected(barcode);
-        });
-        
-        setState(() {
-          _isInitialized = true;
-        });
-      }
+      if (!mounted) return;
+      
+      _webScannerStream!.listen((barcode) {
+        _handleBarcodeDetected(barcode);
+      });
+      
+      setState(() {
+        _isInitialized = true;
+      });
     } catch (e) {
       if (kDebugMode) {
         print('Web scanner initialization failed: $e');
@@ -185,7 +185,8 @@ class _PlatformBarcodeScannerState extends State<PlatformBarcodeScanner> {
   
   Future<void> _toggleTorch() async {
     if (kIsWeb) {
-      await _webScanner?.toggleTorch(!widget.torchEnabled);
+      // Torch not supported in web version
+      return;
     } else {
       await _mobileController?.toggleTorch();
     }
@@ -195,7 +196,7 @@ class _PlatformBarcodeScannerState extends State<PlatformBarcodeScanner> {
   @override
   void dispose() {
     if (kIsWeb) {
-      _webScanner?.stopScanning();
+      WebBarcodeScannerV2.stopScanning();
     } else {
       _mobileController?.dispose();
     }
@@ -261,88 +262,30 @@ class _PlatformBarcodeScannerState extends State<PlatformBarcodeScanner> {
   }
   
   Widget _buildWebScanner() {
-    if (_videoElement == null) {
-      return const SizedBox.expand(
-        child: ColoredBox(
-          color: Colors.black,
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.videocam_off, color: Colors.white, size: 48),
-                SizedBox(height: 16),
-                Text(
-                  'Камера недоступна',
-                  style: TextStyle(color: Colors.white, fontSize: 16),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-    
-    // Для web спробуємо показати реальне відео
-    try {
-      return SizedBox.expand(
-        child: Stack(
-          children: [
-            // Показуємо відео елемент
-            if (kIsWeb && _videoElement != null)
-              Positioned.fill(
-                child: HtmlElementView(
-                  viewType: 'barcode-scanner-video',
+    // Для веб-версії html5-qrcode створює свій власний UI
+    // Тому просто показуємо чорний фон
+    return SizedBox.expand(
+      child: Container(
+        color: Colors.black,
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.camera_alt, color: Colors.white70, size: 48),
+              SizedBox(height: 16),
+              Text(
+                'Камера активна\nНаведіть на штрих-код',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 16,
                 ),
               ),
-            // Fallback для випадків, коли відео не показується
-            Container(
-              color: Colors.black.withValues(alpha: 0.3),
-              child: const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.camera_alt, color: Colors.white70, size: 48),
-                    SizedBox(height: 16),
-                    Text(
-                      'Камера активна\nНаведіть на штрих-код',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      // Fallback на випадок помилки
-      return SizedBox.expand(
-        child: Container(
-          color: Colors.black,
-          child: const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.camera_alt, color: Colors.white, size: 48),
-                SizedBox(height: 16),
-                Text(
-                  'Камера активна\nНаведіть на штрих-код',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
+            ],
           ),
         ),
-      );
-    }
+      ),
+    );
   }
   
   Widget _buildMobileScanner() {
