@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/network_service.dart';
 import '../screens/home.dart';
 import '../screens/result.dart';
@@ -18,6 +19,7 @@ class _ScanScreenState extends State<ScanScreen>
     detectionSpeed: DetectionSpeed.noDuplicates,
     facing: CameraFacing.back,
     torchEnabled: false,
+    formats: [BarcodeFormat.ean13, BarcodeFormat.upcA, BarcodeFormat.code128],
   );
   bool isScanning = false;
   bool torchOn = false;
@@ -60,7 +62,7 @@ class _ScanScreenState extends State<ScanScreen>
     });
   }
 
-  Future<void> _handleBarcode(Barcode barcode) async {
+  Future<void> _handleBarcode(String code) async {
     if (isScanning) return;
 
     setState(() {
@@ -69,7 +71,7 @@ class _ScanScreenState extends State<ScanScreen>
       _showSuccess = false;
     });
 
-    final code = barcode.rawValue ?? '';
+    
     final networkService = NetworkService();
     final isConnected = await networkService.isConnected();
 
@@ -122,7 +124,9 @@ class _ScanScreenState extends State<ScanScreen>
 
   @override
   Widget build(BuildContext context) {
-    final double boxSize = MediaQuery.of(context).size.width * 0.8;
+    final double boxSize = kIsWeb
+    ? MediaQuery.of(context).size.width * 0.4
+    : MediaQuery.of(context).size.width * 0.8;
 
     return PopScope(
       canPop: false,
@@ -137,6 +141,30 @@ class _ScanScreenState extends State<ScanScreen>
             title: const Text('Сканер'),
             centerTitle: true,
             actions: [
+              if (kIsWeb)
+                IconButton(
+                  icon: const Icon(Icons.keyboard),
+                  tooltip: 'Ввести штрихкод вручну',
+                  onPressed: () async {
+                    final input = await showDialog<String>(
+                      context: context,
+                      builder: (ctx) {
+                        final controller = TextEditingController();
+                        return AlertDialog(
+                          title: const Text('Введіть штрихкод'),
+                          content: TextField(controller: controller),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
+                            TextButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('OK')),
+                          ],
+                        );
+                      },
+                    );
+                    if (input != null && input.isNotEmpty) {
+                      await _handleBarcode(input);
+                    }
+                  },
+                ),
               IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: () => Navigator.of(context).pushAndRemoveUntil(
@@ -154,7 +182,14 @@ class _ScanScreenState extends State<ScanScreen>
                 controller: controller,
                 onDetect: (capture) async {
                   if (capture.barcodes.isEmpty) return;
-                  await _handleBarcode(capture.barcodes.first);
+                  await _handleBarcode(capture.barcodes.first.rawValue ?? '');
+                },
+                errorBuilder: (context, error) {
+                  setState(() {
+                    _hasError = true;
+                    _errorMessage = 'Помилка камери: $error';
+                  });
+                  return const SizedBox.shrink();
                 },
               ),
               Positioned.fill(
