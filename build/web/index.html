@@ -17,16 +17,20 @@
   <base href="/">
 
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="Сканер штрихкодів для ХШ">
-  <meta name="keywords" content="сканер, штрих-код, QR-код, Jinsovik, мобільний">
+  <meta name="description" content="Професійний PWA сканер штрихкодів - швидке сканування для бізнесу">
+  <meta name="keywords" content="PWA, сканер, штрих-код, barcode, scanner, Jinsovik, progressive web app">
   <meta name="author" content="Jinsovik">
+  <meta name="robots" content="index, follow">
   
-  <!-- PWA meta tags -->
-  <meta name="theme-color" content="#45A1FF">
+  <!-- Enhanced PWA meta tags -->
+  <meta name="theme-color" content="#45A1FF" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="application-name" content="Jinsovik Сканер">
+  <meta name="application-name" content="Jinsovik Scanner PWA">
+  <meta name="msapplication-TileColor" content="#45A1FF">
+  <meta name="msapplication-config" content="browserconfig.xml">
   
   <!-- iOS specific meta tags -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -190,16 +194,39 @@
   </div>
   
   <script defer>
-    // Service Worker registration for PWA
+    // Enhanced Service Worker registration for PWA
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function() {
-        navigator.serviceWorker.register('/flutter_service_worker.js')
-          .then(function(registration) {
-            console.log('ServiceWorker registration successful');
-          })
-          .catch(function(error) {
-            console.log('ServiceWorker registration failed: ', error);
+      window.addEventListener('load', async function() {
+        try {
+          // Register custom PWA service worker
+          const registration = await navigator.serviceWorker.register('/pwa_service_worker.js');
+          console.log('PWA ServiceWorker registered:', registration.scope);
+          
+          // Check for updates
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'activated' && navigator.serviceWorker.controller) {
+                // New service worker activated, show update prompt
+                if (confirm('Nova versiya dostupna! Onovyty?')) {
+                  window.location.reload();
+                }
+              }
+            });
           });
+          
+          // Also register Flutter service worker
+          await navigator.serviceWorker.register('/flutter_service_worker.js');
+        } catch (error) {
+          console.error('ServiceWorker registration failed:', error);
+        }
+      });
+    }
+    
+    // Request persistent storage for better offline support
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().then(granted => {
+        console.log('Persistent storage:', granted ? 'granted' : 'denied');
       });
     }
     
@@ -213,9 +240,56 @@
         }, 500);
       }, 500);
     });
-</script>
     
-    <!-- iOS viewport fix -->
+    // Camera permission pre-request for better UX
+    async function checkCameraPermission() {
+      if ('permissions' in navigator) {
+        try {
+          const result = await navigator.permissions.query({ name: 'camera' });
+          console.log('Camera permission:', result.state);
+          
+          result.addEventListener('change', () => {
+            console.log('Camera permission changed:', result.state);
+          });
+        } catch (error) {
+          console.log('Permission API not fully supported');
+        }
+      }
+    }
+    
+    // Initialize camera check
+    checkCameraPermission();
+    
+    // Install PWA prompt
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      
+      // Show install button or prompt
+      console.log('PWA can be installed');
+      
+      // Auto-show install prompt after 30 seconds
+      setTimeout(() => {
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.then((choiceResult) => {
+            console.log('User choice:', choiceResult.outcome);
+            deferredPrompt = null;
+          });
+        }
+      }, 30000);
+    });
+    
+    // Handle app installed
+    window.addEventListener('appinstalled', () => {
+      console.log('PWA was installed');
+      deferredPrompt = null;
+    });
+  </script>
+  
+  <script>
+    // iOS viewport fix and orientation handling
     function setViewportHeight() {
       let vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--vh', `${vh}px`);
@@ -226,7 +300,17 @@
     window.addEventListener('orientationchange', function() {
       setTimeout(setViewportHeight, 100);
     });
+    
+    // Prevent zoom on input focus (iOS)
+    document.addEventListener('touchstart', function(event) {
+      if (event.touches.length > 1) {
+        event.preventDefault();
+      }
+    });
   </script>
+  
+  <!-- PWA Optimizations -->
+  <script src="web_optimizations.js"></script>
   
   <script src="flutter_bootstrap.js" async></script>
 </body>

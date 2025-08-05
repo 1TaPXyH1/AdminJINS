@@ -1,6 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:package_info_plus/package_info_plus.dart';
 import '../screens/scan.dart';
+import '../screens/pwa_optimized_scan.dart';
 import '../recount/recount_main_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -215,7 +217,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Navigator.of(context).push(
                                   PageRouteBuilder(
                                     pageBuilder: (context, animation, secondaryAnimation) =>
-                                        ScanScreen(selectedStore: selectedStore),
+                                        kIsWeb 
+                                            ? PWAOptimizedScanScreen(selectedStore: selectedStore)
+                                            : ScanScreen(selectedStore: selectedStore),
                                     transitionsBuilder:
                                         (context, animation, secondaryAnimation, child) {
                                       return SlideTransition(
